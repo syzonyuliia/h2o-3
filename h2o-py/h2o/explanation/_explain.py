@@ -1469,6 +1469,8 @@ def ice_plot(
                                 frame, index, column, colors[i], percentile_string)
             if not _isnan(frame.as_data_frame()[column][index]):
                 tmp._data=np.append(tmp._data, orig_row._data, axis=0)
+            if frame.type(column) == "time":
+                tmp[encoded_col] /= 1000 * 3600 * 24  # convert to fractions of days for matplotlib
             if is_factor:
                 response = _get_response(tmp["mean_response"], show_logodds)
                 plt.scatter(factor_map(tmp.get(encoded_col)),
