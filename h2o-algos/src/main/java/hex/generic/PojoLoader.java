@@ -18,23 +18,35 @@ class PojoLoader {
 
     private static final String POJO_EXT = ".java";
 
-    static GenModel loadPojoFromSourceCode(ByteVec sourceVec, Key<Frame> pojoKey) throws IOException {
-        String pojoCode = IOUtils.toString(sourceVec.openStream());
+    static GenModel loadPojoFromSourceCode(ByteVec sourceVec, Key<Frame> pojoKey, String modelId) throws IOException {
+        final String pojoCode = IOUtils.toString(sourceVec.openStream());
+        final String className;
         try {
-            String path = URI.create(pojoKey.toString()).getPath();
-            String fileName = new File(path).getName();
-            if (fileName.endsWith(POJO_EXT)) {
-                fileName = fileName.substring(0, fileName.length() - POJO_EXT.length());
-            }
-            return compileAndInstantiate(fileName, pojoCode);
+            className = inferClassName(pojoKey, modelId);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to automatically infer POJO class name, " +
+                    "please specify the POJO class name explicitly be setting `model_id` parameter.");
+        }
+        try {
+            return compileAndInstantiate(className, pojoCode);
         } catch (Exception e) {
             boolean canCompile = JCodeGen.canCompile();
             boolean selfCheck = compilationSelfCheck();
             throw new IllegalArgumentException(String.format(
                     "POJO compilation failed: " +
-                            "Please make sure key '%s' contains a valid POJO source code and you are running a Java JDK " +
+                            "Please make sure key '%s' contains a valid POJO source code for class '%s' and you are running a Java JDK " +
                             "(compiler present: '%s', self-check passed: '%s').",
-                    pojoKey, canCompile, selfCheck), e);
+                    pojoKey, className, canCompile, selfCheck), e);
+        }
+    }
+
+    static String inferClassName(Key<Frame> pojoKey, String modelId) {
+        String path = URI.create(pojoKey.toString()).getPath();
+        String fileName = new File(path).getName();
+        if (fileName.endsWith(POJO_EXT)) {
+            return fileName.substring(0, fileName.length() - POJO_EXT.length());
+        } else {
+            return modelId;
         }
     }
 
