@@ -241,14 +241,9 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
       double bestTestDev = Double.POSITIVE_INFINITY;
       double[] lambdas = alignSubModelsAcrossCVModels(cvModelBuilders);
       int lmin_max = 0;
-      int lmin = Integer.MAX_VALUE;
-      for (int i = 0; i < cvModelBuilders.length; ++i) {  // find the lowest number of trained submodels
-        GLM g = (GLM) cvModelBuilders[i];
-        lmin = Math.min(lmin, g._model._output._submodels.length);
-      }
       for (int i = 0; i < cvModelBuilders.length; ++i) {  // find the highest best_submodel_idx we need to go through
         GLM g = (GLM) cvModelBuilders[i];
-        lmin_max = Math.max(lmin_max, Math.min(g._model._output._selected_submodel_idx, lmin));
+        lmin_max = Math.max(lmin_max, g._model._output._selected_submodel_idx);
       }
       int lidx = 0; // index into submodel
       int bestId = 0;   // submodel indedx with best Deviance from xval
