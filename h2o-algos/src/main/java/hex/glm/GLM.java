@@ -2113,7 +2113,10 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
           beta = beta_nostd;
         }
         double[][] inv = chol.getInv();
-        ArrayUtils.mult(inv, _parms._obj_reg * se);
+        if (_parms._standardize)
+          ArrayUtils.mult(inv, _parms._obj_reg * se);
+        else
+          ArrayUtils.mult(inv, se);
         _vcov = inv;
         for (int i = 0; i < zvalues.length; ++i)
           zvalues[i] = beta[i] / Math.sqrt(inv[i][i]);

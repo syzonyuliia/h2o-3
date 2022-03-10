@@ -1,5 +1,7 @@
 package hex.glm;
 
+import Jama.LUDecomposition;
+import Jama.Matrix;
 import hex.CreateFrame;
 import hex.GLMMetrics;
 import hex.ModelMetricsBinomialGLM;
@@ -8,6 +10,8 @@ import hex.glm.GLMModel.GLMParameters;
 import hex.glm.GLMModel.GLMParameters.Family;
 import hex.glm.GLMModel.GLMParameters.MissingValuesHandling;
 import hex.glm.GLMModel.GLMParameters.Solver;
+import jsr166y.ThreadLocalRandom;
+import org.apache.commons.math3.distribution.NormalDistribution;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -19,7 +23,10 @@ import water.fvec.*;
 import water.util.VecUtils;
 
 import java.util.*;
+import java.util.stream.DoubleStream;
+import java.util.stream.Stream;
 
+import static hex.glm.GLMModel.GLMParameters.Family.binomial;
 import static org.junit.Assert.*;
 
 /**
@@ -68,7 +75,7 @@ public class GLMBasicTestBinomial extends TestUtil {
 
         GLMParameters parmsB = new GLMParameters();
         parmsB._train = trainDataB._key;
-        parmsB._family = Family.binomial;
+        parmsB._family = binomial;
         parmsB._response_column = "z";
         parmsB._weights_column = "y";
         parmsB._standardize = false;
@@ -144,8 +151,8 @@ public class GLMBasicTestBinomial extends TestUtil {
       Scope.track(tr);
       Scope.track(te);
 
-      GLMModel.GLMParameters paramsO = new GLMModel.GLMParameters(GLMModel.GLMParameters.Family.binomial,
-              GLMModel.GLMParameters.Family.binomial.defaultLink, new double[]{0}, new double[]{0}, 0, 0);
+      GLMModel.GLMParameters paramsO = new GLMModel.GLMParameters(binomial,
+              binomial.defaultLink, new double[]{0}, new double[]{0}, 0, 0);
       paramsO._train = tr._key;
       paramsO._lambda_search = false;
       paramsO._response_column = "response";
@@ -258,7 +265,7 @@ public class GLMBasicTestBinomial extends TestUtil {
 //    Residual Deviance: 305.1 	AIC: 315.1
     String [] cfs1 = new String [] { "Intercept",  "AGE"   ,  "PSA",    "VOL", "GLEASON"};
     double [] vals = new double [] {-4.839677,    -0.007815,    0.023796, -0.007325, 0.794385};
-    GLMParameters params = new GLMParameters(Family.binomial);
+    GLMParameters params = new GLMParameters(binomial);
     params._response_column = "CAPSULE";
     params._ignored_columns = new String[]{"ID","RACE","DPROS","DCAPS"};
     params._train = fKeyTrain;
@@ -455,7 +462,7 @@ public class GLMBasicTestBinomial extends TestUtil {
 //    Residual Deviance: 313 	AIC: 321
     String [] cfs1 = new String [] { "Intercept",  "AGE"   ,  "PSA",     "VOL",    "GLEASON"};
     double [] vals = new double [] {  0,           -0.054102,  0.027517, -0.008937, 0.516363};
-    GLMParameters params = new GLMParameters(Family.binomial);
+    GLMParameters params = new GLMParameters(binomial);
     params._response_column = "CAPSULE";
     params._ignored_columns = new String[]{"ID","RACE","DPROS","DCAPS"};
     params._train = fKeyTrain;
@@ -543,7 +550,7 @@ public class GLMBasicTestBinomial extends TestUtil {
   @Test
   public void testCODGradients(){
     Frame train;
-    GLMParameters params = new GLMParameters(Family.binomial);
+    GLMParameters params = new GLMParameters(binomial);
     GLMModel model = null;
     double[] goldenCoeffs = new double[] {3.315139700626461,0.9929054923448074, -1.0655426388234126,-3.7892948800495154,
             -2.0865591118999833,0.7867696413635438, -1.8615599223372965,1.0643138374753327,1.0986728686030014,
@@ -620,7 +627,7 @@ public class GLMBasicTestBinomial extends TestUtil {
 //    Residual Deviance: 302.9 	AIC: 318.9
     String [] cfs1 = new String [] {"AGE",     "DPROS.a",  "DPROS.b",    "DPROS.c",  "DPROS.d",      "PSA",    "VOL",  "GLEASON"};
     double [] vals = new double [] {-0.00743,   -6.46499,  -5.60120,   -5.18213,    -5.70027,    0.02753,  -0.01235,   0.86122};
-    GLMParameters params = new GLMParameters(Family.binomial);
+    GLMParameters params = new GLMParameters(binomial);
     params._response_column = "CAPSULE";
     params._ignored_columns = new String[]{"ID","RACE","DCAPS"};
     params._train = _prostateTrain._key;
@@ -755,7 +762,7 @@ public class GLMBasicTestBinomial extends TestUtil {
 //    Residual Deviance: 1195 	AIC: 1217
     String [] cfs1 = new String [] { "Intercept",  "AGE",     "RACE.R2",  "RACE.R3", "DPROS.b", "DPROS.c", "DPROS.d", "DCAPS.b", "PSA",     "VOL",    "GLEASON"};
     double [] vals = new double [] { -6.019527,    -0.027350, -0.424333, -0.869188, 1.359856, 1.745655, 1.517155, 0.664479, 0.034541, -0.005819, 0.947644};
-    GLMParameters params = new GLMParameters(Family.binomial);
+    GLMParameters params = new GLMParameters(binomial);
     params._response_column = "CAPSULE";
     params._ignored_columns = new String[]{"ID"};
     params._train = fKeyTrain;
@@ -876,7 +883,7 @@ public class GLMBasicTestBinomial extends TestUtil {
     String [] cfs1 = new String [] {"Intercept", "AGE", "DPROS.b",    "DPROS.c",     "DPROS.d",  "DCAPS.b",  "PSA",      "VOL", "GLEASON"};
     double [] vals = new double [] {-7.85142421,   0.0,    0.93030614,   1.31814009,    0.82918839, 0.63285077, 0.02949062, 0.0,    0.83011321};
     for(Solver s:new Solver[]{Solver.IRLSM,Solver.L_BFGS, Solver.COORDINATE_DESCENT}) {
-      GLMParameters params = new GLMParameters(Family.binomial);
+      GLMParameters params = new GLMParameters(binomial);
       params._response_column = "CAPSULE";
       params._ignored_columns = new String[]{"ID",};
       params._train = _prostateTrain._key;
@@ -929,7 +936,7 @@ public class GLMBasicTestBinomial extends TestUtil {
     String [] cfs1 = new String [] {"Intercept", "AGE", "DPROS.b",    "DPROS.c",     "DPROS.d",  "DCAPS.b",   "PSA",      "VOL", "GLEASON", "RACE.R1"};
     double [] vals = new double [] { 0.0,         0.0,   0.0,          0,             0.0,        0.680406869, 0.007137494, 0.0,  0.0,       0.240953925};
     for(Solver s:new Solver[]{Solver.AUTO,Solver.IRLSM,Solver.L_BFGS, Solver.COORDINATE_DESCENT}) {
-      GLMParameters params = new GLMParameters(Family.binomial);
+      GLMParameters params = new GLMParameters(binomial);
       params._response_column = "CAPSULE";
       params._ignored_columns = new String[]{"ID",};
       params._train = _prostateTrain._key;
@@ -1092,7 +1099,7 @@ public class GLMBasicTestBinomial extends TestUtil {
 //    Residual Deviance: 1235 	AIC: 1243
     String [] cfs1 = new String [] { "Intercept",  "AGE"   ,  "PSA",     "VOL",    "GLEASON"};
     double [] vals = new double [] {  0,           -0.070637,   0.034939, -0.006326, 0.645700};
-    GLMParameters params = new GLMParameters(Family.binomial);
+    GLMParameters params = new GLMParameters(binomial);
     params._response_column = "CAPSULE";
     params._ignored_columns = new String[]{"ID","RACE","DPROS","DCAPS"};
     params._train = fTrain._key;
@@ -1239,7 +1246,7 @@ public class GLMBasicTestBinomial extends TestUtil {
 //    PSA          0.030255231 0.011148747  2.71377864 6.652060e-03
 //    VOL         -0.009793481 0.008753002 -1.11887108 2.631951e-01
 //    GLEASON      0.851867113 0.182282351  4.67333842 2.963429e-06
-    GLMParameters params = new GLMParameters(Family.binomial);
+    GLMParameters params = new GLMParameters(binomial);
     params._response_column = "CAPSULE";
     params._standardize = false;
     params._train = _prostateTrain._key;
@@ -1399,7 +1406,7 @@ public class GLMBasicTestBinomial extends TestUtil {
     } finally {
       if(model != null) model.delete();
     }
-    params = new GLMParameters(Family.binomial);
+    params = new GLMParameters(binomial);
     params._response_column = "IsDepDelayed";
     params._standardize = false;
     params._train = _airlinesTrain._key;
@@ -1446,6 +1453,135 @@ public class GLMBasicTestBinomial extends TestUtil {
     predict.delete();
     model.delete();
   }
+
+  /***
+   * Test the implementation of binomial standard error calculation.  It should be the same as here:
+   * https://stats.stackexchange.com/questions/89484/how-to-compute-the-standard-errors-of-a-logistic-regressions-coefficients
+   */
+  @Test
+  public void testStandardErrorBinomial() {
+    Scope.enter();
+    try {
+      Frame bigFrame = parseAndTrackTestFile("smalldata/gam_test/synthetic_20Cols_binomial_20KRows.csv");
+      String[] ignoreCols = new String[]{"C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"};
+      SplitFrame sf = new SplitFrame(bigFrame, new double[] {0.01, 0.99}, null);
+      sf.exec().get();
+      Key[] splits = sf._destination_frames;
+      Frame trainFrame = Scope.track((Frame) splits[0].get());
+      Scope.track((Frame) splits[1].get());
+      double[] startVal = new double[]{0.7453275580005079, 0.64848157889351, 0.6002544346079828, 0.8681890882639597,
+              0.8383870319271398, 0.8867949974556715, 0.07576417746370567, 0.5373550607913393, 0.005879217569412454,
+              0.8942772492726005, 0.3461378283678047};
+      GLMParameters parms = new GLMParameters();
+      parms._family = binomial;
+      parms._train = trainFrame._key;
+      parms._response_column = "response";
+      parms._startval = startVal;
+      parms._ignored_columns = ignoreCols;
+      parms._max_iterations = 1;
+      parms._compute_p_values = true; // standardize = true by default
+      parms._lambda = new double[]{0};
+      GLMModel model = new GLM(parms).trainModel().get();
+      Scope.track_generic(model);
+      double[] standardErr = manualGenSE(trainFrame, model);
+      assertStandardErr(model, standardErr, 1);
+    } finally {
+      Scope.exit();
+    }
+  }
+  
+  public void assertStandardErr(GLMModel model, double[] manualStdErr, double reg) {
+    double[] zValues = model._output.getZValues();
+    double[] stdErr = model._output.stdErr();
+    double[] pValues = model._output.pValues();
+    double[] zValuesManual = genZValues(model._output.beta(), manualStdErr, reg);
+    double[] pValuesManual = genPValues(zValuesManual);
+    assertArrayEquals(zValues, zValuesManual, 1e-3);
+    assertArrayEquals(stdErr, manualStdErr, 1e-4);
+    assertArrayEquals(pValues, pValuesManual, 1e-2);
+  }
+  
+  public static double[] genPValues(double[] zValues) {
+    NormalDistribution gaussian = new NormalDistribution();
+    double[] pValues = new double[zValues.length];
+    for (int index=0; index<zValues.length; index++)
+      pValues[index] = 2*gaussian.cumulativeProbability(-Math.abs(zValues[index]));
+    return pValues;  
+  }
+  
+  public static double[] genZValues(double[] beta, double[] stdErr, double reg) {
+    int betaLen = beta.length;
+    double[] zValues = new double[betaLen];
+    for (int index=0; index<betaLen; index++)
+      zValues[index] = reg*beta[index]/stdErr[index];
+    return zValues;
+  }
+  
+  public static double[] manualGenSE(Frame trainFrame, GLMModel model) {
+    double[] betaDeriv = genBetaDeriv2(trainFrame, model); // generate d2l(b)/db2
+    double[][] xcov = genXCOV(betaDeriv, trainFrame, model);
+    double[] xcovDiag = genXCOVInvDiag(xcov);
+    return getStdErr(xcovDiag);
+  }
+  
+  public static double[] getStdErr(double[] xcovDiag) {
+    int betaLen = xcovDiag.length;
+    double[] stdErr = new double[betaLen];
+    for (int index=0; index<betaLen; index++)
+      stdErr[index] = Math.sqrt(xcovDiag[index]);
+    return stdErr;
+  }
+  
+  public static double[] genXCOVInvDiag(double[][] xcov) {
+    int matLen = xcov.length;
+    Matrix xcovMat = new Matrix(xcov);
+    double[][] xcovMatInv = xcovMat.inverse().getArray();
+    double[] xcovInvDiag = new double[matLen];
+    for (int index=0; index<matLen; index++)
+      xcovInvDiag[index] = xcovMatInv[index][index];
+    return xcovInvDiag;
+  }
+  
+  public static double[][] genXCOV(double[] betaDeriv2, Frame trainFrame, GLMModel model) {
+    int betaLen = model._output.beta().length;
+    int numRows = (int) trainFrame.numRows();
+    int dataLen = betaLen-1; // exclude intercept
+    double[][] xcov = new double[betaLen][betaLen];
+    for (int rowIndex=0; rowIndex<numRows; rowIndex++) {
+      for (int i=0; i<dataLen; i++) {
+        for (int j=0; j<dataLen; j++) {
+          xcov[i][j] += betaDeriv2[rowIndex]*trainFrame.vec(i).at(rowIndex)*trainFrame.vec(j).at(rowIndex);
+        }
+        xcov[i][dataLen] += betaDeriv2[rowIndex]*trainFrame.vec(i).at(rowIndex);
+        xcov[dataLen][i] = xcov[i][dataLen];
+      }
+      // deal with the intercept columns
+      xcov[dataLen][dataLen] += betaDeriv2[rowIndex];
+    }
+    return xcov;
+  }
+  
+  public static double[] genBetaDeriv2(Frame trainFrame, GLMModel model) {
+    double[] beta = model._output.beta();
+    int betaLen = beta.length;
+    int numData = (int) trainFrame.numRows();
+    double[] betaDeriv = new double[numData];
+    for (int index=0; index<numData; index++) { // generate W
+      double probClassOne = genProbClass1(beta, trainFrame, index);
+      betaDeriv[index] = probClassOne*(1.0-probClassOne);
+    }
+    return betaDeriv;
+  }
+  
+  public static double genProbClass1(double[] beta, Frame trainFrame, int rowIndex) {
+    int dataSize = beta.length-1;
+    double innerProd = 0;
+    for (int index=0; index<dataSize; index++) {
+      innerProd += trainFrame.vec(index).at(rowIndex)*beta[index];
+    }
+    innerProd += beta[dataSize];
+    return 1.0/(1+Math.exp(-innerProd));
+  }
   
   @Test
   public void testAUTOBinomial(){
@@ -1453,7 +1589,7 @@ public class GLMBasicTestBinomial extends TestUtil {
     Vec res = Vec.makeVec(new long[]{1,1,0,0,0},new String[]{"sun","moon"},Vec.newKey());
     Frame fr = new Frame(Key.<Frame>make("fr"), new String[]{"x", "y"}, new Vec[]{cat, res});
     DKV.put(fr);
-    for (Family family : new Family[]{Family.binomial, Family.AUTO}) {
+    for (Family family : new Family[]{binomial, Family.AUTO}) {
       for (GLMParameters.Link link : new GLMParameters.Link[]{GLMParameters.Link.family_default, GLMParameters.Link.logit}) {
         GLMParameters parms = new GLMParameters();
         parms._train = fr._key;
