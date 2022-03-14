@@ -4540,10 +4540,7 @@ def assertCoefDictEqual(regCoeff, coeff, tol=1e-6):
 
 
 def assert_equals(expected, actual, message="", delta=0):
-    if delta != -1:
         assert abs(expected - actual) <= delta, ("{0}\nexpected:{1}\nactual\t:{2}".format(message, expected, actual))
-    else:
-        assert expected == actual, ("{0}\nexpected:{1}\nactual\t:{2}".format(message, expected, actual))
 
 
 def assert_not_equal(expected, actual, message=""):
