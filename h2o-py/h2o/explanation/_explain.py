@@ -235,7 +235,7 @@ class NumpyFrame:
                             row[idx].lower() == "nan"
                     ) else "nan" for row in df[1:]], dtype=np.float64)
                     if h2o_frame.type(self._columns[idx]) == "time":
-                        self._data[:, idx] /= 1000 * 3600 * 24  # convert to fractions of days for matplotlib (doesn't like ms)
+                        self._data[:, idx] = _timestamp_to_mpl_datetime(self._data[:, idx])
                 except Exception:
                     raise RuntimeError("Unexpected type of column {}!".format(col))
 
@@ -454,6 +454,28 @@ class NumpyFrame:
         """
         for col in self.columns:
             yield col, self.get(col, with_categorical_names)
+
+
+def _mpl_datetime_to_str(mpl_datetime):
+    # type: (float) -> str
+    """
+    Convert matplotlib-compatible date time which in which the unit is a day to a human-readable string.
+
+    :params mpl_datetime: number of days since the beginning of the unix epoch
+    :returns: string containing date time
+    """
+    from datetime import datetime
+    # convert to seconds and then to datetime
+    return datetime.utcfromtimestamp(mpl_datetime * 3600 * 24).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def _timestamp_to_mpl_datetime(timestamp):
+    """
+    Convert timestamp to matplotlib compatible timestamp.
+    :params timestamp: number of ms since the beginning of the unix epoch
+    :returns: number of days since the beginning of the unix epoch    
+    """
+    return timestamp / (1000 * 3600 * 24)
 
 
 def _get_domain_mapping(model):
@@ -813,7 +835,11 @@ def shap_explain_row_plot(
             contribution_subset_note = ""
         contributions = dict(
             feature=np.array(
-                ["{}={}".format(pair[0], str(row.get(pair[0])[0])) for pair in picked_features]),
+                ["{}={}".format(pair[0],
+                                (_mpl_datetime_to_str(row.get(pair[0])[0]) 
+                                 if frame.type(pair[0]) == "time" 
+                                 else str(row.get(pair[0])[0]))) 
+                 for pair in picked_features]),
             value=np.array([pair[1][0] for pair in picked_features])
         )
         plt.figure(figsize=figsize)
@@ -1066,7 +1092,7 @@ def pd_plot(
                                nbins=20 if not is_factor else 1 + frame[column].nlevels()[0])[0])
         encoded_col = tmp.columns[0]
         if frame.type(column) == "time":
-            tmp[encoded_col] /= 1000 * 3600 * 24  # convert to fractions of days for matplotlib
+            tmp[encoded_col] = _timestamp_to_mpl_datetime(tmp[encoded_col])
         if is_factor:
             plt.errorbar(factor_map(tmp.get(encoded_col)), tmp["mean_response"],
                          yerr=tmp["stddev_response"], fmt='o', color=color,
@@ -1217,7 +1243,7 @@ def pd_multi_plot(
                                    nbins=20 if not is_factor else 1 + frame[column].nlevels()[0])[0])
             encoded_col = tmp.columns[0]
             if frame.type(column) == "time":
-                tmp[encoded_col] /= 1000 * 3600 * 24  # convert to fractions of days for matplotlib
+                tmp[encoded_col] = _timestamp_to_mpl_datetime(tmp[encoded_col])
             if is_factor:
                 plt.scatter(factor_map(tmp.get(encoded_col)), tmp["mean_response"],
                             color=[colors[i]], label=model_ids[i],
@@ -1470,7 +1496,7 @@ def ice_plot(
             if not _isnan(frame.as_data_frame()[column][index]):
                 tmp._data=np.append(tmp._data, orig_row._data, axis=0)
             if frame.type(column) == "time":
-                tmp[encoded_col] /= 1000 * 3600 * 24  # convert to fractions of days for matplotlib
+                tmp[encoded_col] = _timestamp_to_mpl_datetime(tmp[encoded_col])
             if is_factor:
                 response = _get_response(tmp["mean_response"], show_logodds)
                 plt.scatter(factor_map(tmp.get(encoded_col)),
@@ -1683,7 +1709,7 @@ def _consolidate_varimps(model):
 # either forcing "Agg" backend or showing the plot.
 # It also mimics the look and feel of the rest of the explain plots.
 def _varimp_plot(model, figsize, num_of_features=None, save_plot_path=None):
-    # type: (h2o.model.ModelBase, Tuple[Float, Float], Optional[int]) -> matplotlib.pyplot.Figure
+    # type: (h2o.model.ModelBase, Tuple[Float, Float], Optional[int], Optional[str]) -> matplotlib.pyplot.Figure
     """
     Variable importance plot.
     :param model: H2O model
