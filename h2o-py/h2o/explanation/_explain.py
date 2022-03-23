@@ -837,7 +837,7 @@ def shap_explain_row_plot(
             feature=np.array(
                 ["{}={}".format(pair[0],
                                 (_mpl_datetime_to_str(row.get(pair[0])[0]) 
-                                 if frame.type(pair[0]) == "time" 
+                                 if pair[0] in frame.columns and frame.type(pair[0]) == "time"
                                  else str(row.get(pair[0])[0]))) 
                  for pair in picked_features]),
             value=np.array([pair[1][0] for pair in picked_features])
@@ -899,9 +899,10 @@ def shap_explain_row_plot(
         plt.axvline(prediction, label="Prediction")
         plt.axvline(bias, linestyle="dotted", color="gray", label="Bias")
         plt.vlines(contributions["cummulative_value"][1:],
-                   ymin=[y - 0.4 for y in range(contributions["value"].shape[0]-1)],
-                   ymax=[y + 1.4 for y in range(contributions["value"].shape[0]-1)],
+                   ymin=[y - 0.4 for y in range(contributions["value"].shape[0] - 1)],
+                   ymax=[y + 1.4 for y in range(contributions["value"].shape[0] - 1)],
                    color="black")
+
         plt.legend()
         plt.grid(True)
         xlim = plt.xlim()
@@ -961,12 +962,14 @@ def _add_histogram(frame, column, add_rug=True, add_histogram=True, levels_order
     plt = get_matplotlib_pyplot(False, raise_if_not_available=True)
     ylims = plt.ylim()
     nf = NumpyFrame(frame[column])
+
     if nf.isfactor(column) and levels_order is not None:
         new_mapping = dict(zip(levels_order, range(len(levels_order))))
         mapping = _factor_mapper({k: new_mapping[v] for k, v in nf.from_num_to_factor(column).items()})
     else:
         def mapping(x):
             return x
+
     if add_rug:
         plt.plot(mapping(nf[column]),
                  [ylims[0] for _ in range(frame.nrow)],

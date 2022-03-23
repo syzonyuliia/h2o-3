@@ -639,24 +639,24 @@ def test_explanation_timeseries():
     gbm.train(x, y, training_frame=train)
 
     # test shap summary
-    assert isinstance(gbm.shap_summary_plot(train), matplotlib.pyplot.Figure)
+    assert isinstance(gbm.shap_summary_plot(train).figure(), matplotlib.pyplot.Figure)
     matplotlib.pyplot.close()
 
     # test shap explain row
-    assert isinstance(gbm.shap_explain_row_plot(train, 1), matplotlib.pyplot.Figure)
+    assert isinstance(gbm.shap_explain_row_plot(train, 1).figure(), matplotlib.pyplot.Figure)
     matplotlib.pyplot.close()
 
     # test residual analysis
-    assert isinstance(gbm.residual_analysis_plot(train), matplotlib.pyplot.Figure)
+    assert isinstance(gbm.residual_analysis_plot(train).figure(), matplotlib.pyplot.Figure)
     matplotlib.pyplot.close()
 
     # test pd_plot
     for col in cols_to_test:
-        assert isinstance(gbm.pd_plot(train, col), matplotlib.pyplot.Figure)
+        assert isinstance(gbm.pd_plot(train, col).figure(), matplotlib.pyplot.Figure)
 
     # test ICE plot
     for col in cols_to_test:
-        assert isinstance(gbm.ice_plot(train, col), matplotlib.pyplot.Figure)
+        assert isinstance(gbm.ice_plot(train, col).figure(), matplotlib.pyplot.Figure)
     matplotlib.pyplot.close("all")
 
     # test explain

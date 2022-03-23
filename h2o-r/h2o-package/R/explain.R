@@ -1213,7 +1213,7 @@ h2o.shap_summary_plot <-
 
     contr[["row"]] <- paste0(
       "Feature: ", contr[["feature"]], "\n",
-      "Feature Value: ", contr[["original_value"]], "\n",
+      "Feature Value: ", format(contr[["original_value"]]), "\n",
       "Row Index: ", contr[["row_index"]], "\n",
       "Contribution: ", contr[["contribution"]]
     )
@@ -2021,7 +2021,7 @@ h2o.pd_plot <- function(object,
     }
 
     pdp[["text"]] <- paste0(
-      "Feature Value: ", format(pdp[[make.names(column)]]), "\n",
+      "Feature Value: ", format(pdp[[col_name]]), "\n",
       "Mean Response: ", pdp[["mean_response"]], "\n",
       "Target: ", pdp[["target"]]
     )
@@ -2073,9 +2073,11 @@ h2o.pd_plot <- function(object,
       ggplot2::scale_fill_brewer(type = "qual", palette = "Dark2") +
       # make the histogram closer to the axis. (0.05 is the default value)
       ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.05)))
+
       if ("POSIXct" %in% class(pdp[[col_name]])) {
         p <- p + ggplot2::scale_x_datetime()
       }
+
       p <- p + ggplot2::theme_bw() +
       ggplot2::theme(
         legend.title = ggplot2::element_blank(),
@@ -2436,6 +2438,7 @@ h2o.ice_plot <- function(model,
               column, "\" feature.")
     }
 
+    col_name <- make.names(column)
     rug_data <- stats::setNames(as.data.frame(newdata[[column]]), col_name)
     rug_data[["text"]] <- paste0("Feature Value: ", format(rug_data[[col_name]]))
 
@@ -2537,21 +2540,17 @@ h2o.ice_plot <- function(model,
     names(results) <- make.names(names(results))
     names(orig_values) <- make.names(names(orig_values))
 
-    col_name <- make.names(column)
-
     if (is.character(results[[col_name]])) {
-      pdp[[col_name]] <- factor(pdp[[col_name]], levels = levels(rug_data[[col_name]]))
-      pdp <- pdp[pdp[[col_name]] %in% levels(rug_data[[col_name]]), ]
       results[[col_name]] <- factor(results[[col_name]], levels = levels(rug_data[[col_name]]))
       results <- results[results[[col_name]] %in% levels(rug_data[[col_name]]), ]
     }
 
     # Type information get's lost during the PD computation
     if (attr(newdata, "types")[column == names(newdata)] == "time") {
-      pdp[[column]] <- pdp[[column]] / 1000
-      class(pdp[[column]]) <- "POSIXct"
-      results[[column]] <- results[[column]] / 1000
-      class(results[[column]]) <- "POSIXct"
+      orig_values[[col_name]] <- orig_values[[col_name]] / 1000
+      class(orig_values[[col_name]]) <- "POSIXct"
+      results[[col_name]] <- results[[col_name]] / 1000
+      class(results[[col_name]]) <- "POSIXct"
     }
 
     results[["text"]] <- paste0(
@@ -2579,6 +2578,10 @@ h2o.ice_plot <- function(model,
                                           100
                                         }
           ))
+        if (attr(newdata, "types")[column == names(newdata)] == "time") {
+          pdp[[column]] <- pdp[[column]] / 1000
+          class(pdp[[column]]) <- "POSIXct"
+        }
         if (!is_factor && centered) {
             pdp[["mean_response"]] <- pdp[["mean_response"]] - pdp[["mean_response"]][1]
         }
@@ -2591,7 +2594,7 @@ h2o.ice_plot <- function(model,
         }
         pdp[["text"]] <- paste0(
           "Partial Depencence \n",
-          "Feature Value: ", pdp[[col_name]], "\n",
+          "Feature Value: ", format(pdp[[col_name]]), "\n",
           "Mean Response: ", pdp[["mean_response"]], "\n"
         )
     }
@@ -2617,8 +2620,7 @@ h2o.ice_plot <- function(model,
                                    inherit.aes = FALSE, data = as.data.frame(newdata[[column]]))
     rug_part <- ggplot2::geom_rug(ggplot2::aes(x = .data[[col_name]], y = NULL, text = NULL),
                                   sides = "b", alpha = 0.1, color = "black",
-                                  data = stats::setNames(as.data.frame(newdata[[column]]), col_name)
-    )
+                                  data = rug_data)
     plot_name <- ggplot2::labs(y = y_label, title = sprintf(
       "Individual Conditional Expectations on \"%s\"%s\nfor Model: \"%s\"", col_name,
       if (is.null(target)) {
@@ -2659,10 +2661,8 @@ h2o.ice_plot <- function(model,
     original_observations_part <- ggplot2::geom_point(data = as.data.frame(orig_values),
                                                       size = 4.5,
                                                       alpha = 0.5,
-                                                      ggplot2::aes(shape = "Original observations",
-                                                                   group = "Original observations"),
-                                                      x = orig_values[[column]],
-                                                      y = orig_values[['mean_response']],
+                                                      mapping = ggplot2::aes(shape = "Original observations",
+                                                                             group = "Original observations"),
                                                       show.legend = ifelse(is.numeric(newdata[[column]]), NA, FALSE)
     )
     shape_legend_manual <- ggplot2::scale_shape_manual(
@@ -2690,8 +2690,7 @@ h2o.ice_plot <- function(model,
       q <- q + pdp_part + pdp_dashed
     }
     q <- q + shape_legend_manual + shape_legend_manual2
-
-    if ("POSIXct" %in% class(pdp[[col_name]])) {
+    if ("POSIXct" %in% class(results[[col_name]])) {
       q <- q + ggplot2::scale_x_datetime()
     }
 
