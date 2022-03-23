@@ -2653,7 +2653,7 @@ h2o.ice_plot <- function(model,
       theme_part2
 
     ice_part <- geom_point_or_line(!is.numeric(newdata[[column]]),
-                                   if (is.factor(newdata[[col_name]])) {
+                                   if (is.factor(newdata[[column]])) {
                                      ggplot2::aes(shape = "ICE", group = .data$name)
                                    } else {
                                      ggplot2::aes(linetype = "ICE", group = .data$name)
@@ -2663,7 +2663,8 @@ h2o.ice_plot <- function(model,
                                                       alpha = 0.5,
                                                       mapping = ggplot2::aes(shape = "Original observations",
                                                                              group = "Original observations"),
-                                                      show.legend = ifelse(is.numeric(newdata[[column]]), NA, FALSE)
+                                                      show.legend = ifelse(is.numeric(newdata[[column]]) ||
+                                                                              attr(newdata, "types")[column == names(newdata)] == "time", NA, FALSE)
     )
     shape_legend_manual <- ggplot2::scale_shape_manual(
       values = c("Original observations" = 19, "ICE" = 20, "Partial Dependence" = 18))
