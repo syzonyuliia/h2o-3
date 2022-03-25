@@ -682,12 +682,19 @@ with_no_h2o_progress <- function(expr) {
   return(res)
 }
 
+.is_datetime <- function(column) {
+  if (!is.null(ncol(column)) && ncol(column) > 1) {
+    stop("Only one column should be provided!")
+  }
+  return("POSIXct" %in% class(column) ||
+           (!is.null(attr(column, "types")) && attr(column, "types") == "time"))
+}
+
 .is_continuous <- function(column) {
   if (!is.null(ncol(column)) && ncol(column) > 1) {
     stop("Only one column should be provided!")
   }
-  is.numeric(column) || "POSIXct" %in% class(column) ||
-    (!is.null(attr(column, "types")) && attr(column, "types") == "time")
+  return(is.numeric(column) || .is_datetime(column))
 }
 
 .render_df_to_html <- function(df) {
@@ -2015,7 +2022,7 @@ h2o.pd_plot <- function(object,
     y_range <- c(min(pdp$mean_response - pdp$stddev_response), max(pdp$mean_response + pdp$stddev_response))
 
     # Type information get's lost during the PD computation
-    if (attr(newdata, "types")[column == names(newdata)] == "time") {
+    if (.is_datetime(newdata[[column]])) {
       pdp[[col_name]] <- pdp[[col_name]] / 1000
       class(pdp[[col_name]]) <- "POSIXct"
     }
@@ -2046,7 +2053,7 @@ h2o.pd_plot <- function(object,
                         data = rug_data
       )
     if (row_index > -1) {
-      if ("POSIXct" %in% class(row_val))
+      if (.is_datetime(row_val))
         row_val <- as.numeric(row_val)
       p <- p + ggplot2::geom_vline(xintercept = row_val, linetype = "dashed")
     }
@@ -2074,7 +2081,7 @@ h2o.pd_plot <- function(object,
       # make the histogram closer to the axis. (0.05 is the default value)
       ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.05)))
 
-      if ("POSIXct" %in% class(pdp[[col_name]])) {
+      if (.is_datetime(pdp[[col_name]])) {
         p <- p + ggplot2::scale_x_datetime()
       }
 
@@ -2203,7 +2210,7 @@ h2o.pd_multi_plot <- function(object,
         )
       if (is.null(results)) {
         # Type information get's lost during the PD computation
-        if (attr(newdata, "types")[column == names(newdata)] == "time") {
+        if (.is_datetime(newdata[[column]])) {
           pdp[[column]] <- pdp[[column]] / 1000
           class(pdp[[column]]) <- "POSIXct"
         }
@@ -2249,7 +2256,7 @@ h2o.pd_multi_plot <- function(object,
                         data = rug_data
       )
     if (row_index > -1) {
-      if ("POSIXct" %in% class(row_val))
+      if (.is_datetime(row_val))
         row_val <- as.numeric(row_val)
       p <- p + ggplot2::geom_vline(xintercept = row_val, linetype = "dashed")
     }
@@ -2271,7 +2278,7 @@ h2o.pd_multi_plot <- function(object,
       ggplot2::scale_color_brewer(type = "qual", palette = "Dark2") +
       # make the histogram closer to the axis. (0.05 is the default value)
       ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0, 0.05)))
-    if ("POSIXct" %in% class(data[[col_name]])) {
+    if (.is_datetime(data[[col_name]])) {
       p <- p + ggplot2::scale_x_datetime()
     }
     p <- p + ggplot2::theme_bw() +
@@ -2546,7 +2553,7 @@ h2o.ice_plot <- function(model,
     }
 
     # Type information get's lost during the PD computation
-    if (attr(newdata, "types")[column == names(newdata)] == "time") {
+    if (.is_datetime(newdata[[column]])) {
       orig_values[[col_name]] <- orig_values[[col_name]] / 1000
       class(orig_values[[col_name]]) <- "POSIXct"
       results[[col_name]] <- results[[col_name]] / 1000
@@ -2578,7 +2585,7 @@ h2o.ice_plot <- function(model,
                                           100
                                         }
           ))
-        if (attr(newdata, "types")[column == names(newdata)] == "time") {
+        if (.is_datetime(newdata[[column]])) {
           pdp[[column]] <- pdp[[column]] / 1000
           class(pdp[[column]]) <- "POSIXct"
         }
@@ -2661,10 +2668,11 @@ h2o.ice_plot <- function(model,
     original_observations_part <- ggplot2::geom_point(data = as.data.frame(orig_values),
                                                       size = 4.5,
                                                       alpha = 0.5,
-                                                      mapping = ggplot2::aes(shape = "Original observations",
-                                                                             group = "Original observations"),
-                                                      show.legend = ifelse(is.numeric(newdata[[column]]) ||
-                                                                              attr(newdata, "types")[column == names(newdata)] == "time", NA, FALSE)
+                                                      mapping = ggplot2::aes(
+                                                        y = .data$mean_response,
+                                                        shape = "Original observations",
+                                                        group = "Original observations"),
+                                                      show.legend = ifelse(.is_continuous(newdata[[column]]), NA, FALSE)
     )
     shape_legend_manual <- ggplot2::scale_shape_manual(
       values = c("Original observations" = 19, "ICE" = 20, "Partial Dependence" = 18))
@@ -2691,7 +2699,7 @@ h2o.ice_plot <- function(model,
       q <- q + pdp_part + pdp_dashed
     }
     q <- q + shape_legend_manual + shape_legend_manual2
-    if ("POSIXct" %in% class(results[[col_name]])) {
+    if (.is_datetime(results[[col_name]])) {
       q <- q + ggplot2::scale_x_datetime()
     }
 
