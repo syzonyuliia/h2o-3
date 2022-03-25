@@ -223,7 +223,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
       alphaChangePoints[i + 1] = alphaChangePoints[i] + alphaSubmodels[alphaIndices[i]];
     }
 
-    double[] lambdas = new double[alphaChangePoints[alphas.length]];
+    double[] alphasAndLambdas = new double[alphaChangePoints[alphas.length]*2];
     for (int i = 0; i < cvModelBuilders.length; ++i) {
       GLM g = (GLM) cvModelBuilders[i];
       Submodel[] alignedSubmodels = new Submodel[alphaChangePoints[alphas.length]];
@@ -247,8 +247,13 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
         if (alphaIdx < 0 || g._model._output._submodels[j].alpha_value != alphas[alphaIdx])
           continue;
         alignedSubmodels[alphaChangePoints[alphaIdx] + k] = g._model._output._submodels[j];
-        assert lambdas[alphaChangePoints[alphaIdx] + k] == 0 || lambdas[alphaChangePoints[alphaIdx] + k] == g._model._output._submodels[j].lambda_value;
-        lambdas[alphaChangePoints[alphaIdx] + k++] = g._model._output._submodels[j].lambda_value;
+        assert alphasAndLambdas[alphaChangePoints[alphaIdx] + k] == 0 || (
+                alphasAndLambdas[alphaChangePoints[alphaIdx] + k] == g._model._output._submodels[j].alpha_value &&
+                        alphasAndLambdas[alphaChangePoints[alphas.length] + alphaChangePoints[alphaIdx] + k] == g._model._output._submodels[j].lambda_value
+        );
+        alphasAndLambdas[alphaChangePoints[alphaIdx] + k] = g._model._output._submodels[j].alpha_value;
+        alphasAndLambdas[alphaChangePoints[alphas.length] + alphaChangePoints[alphaIdx] + k] = g._model._output._submodels[j].lambda_value;
+        k++;
       }
       assert g._model._output._selected_submodel_idx == g._model._output._best_submodel_idx;
       assert g._model._output._selected_submodel_idx == g._model._output._best_lambda_idx;
@@ -257,9 +262,9 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
               (g._model._output._submodels[g._model._output._selected_submodel_idx].lambda_value ==
                       alignedSubmodels[g._model._output._selected_submodel_idx + nNullsUntilSelectedSubModel].lambda_value);
       g._model._output._submodels = alignedSubmodels;
-      g._model._output.setSubmodelIdx(g._model._output._selected_submodel_idx + nNullsUntilSelectedSubModel);
+      g._model._output.setSubmodelIdx(g._model._output._selected_submodel_idx + nNullsUntilSelectedSubModel, _parms);
     }
-    return lambdas;
+    return alphasAndLambdas;
   }
 
   /**
@@ -274,11 +279,11 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
    */
   @Override
   public void cv_computeAndSetOptimalParameters(ModelBuilder[] cvModelBuilders) {
-    if(_parms._max_runtime_secs != 0) _parms._max_runtime_secs = 0;
-      _xval_deviances = new double[_parms._lambda.length * _parms._alpha.length];
-      _xval_sd = new double[_parms._lambda.length * _parms._alpha.length];
+      if(_parms._max_runtime_secs != 0) _parms._max_runtime_secs = 0;
       double bestTestDev = Double.POSITIVE_INFINITY;
-      double[] lambdas = alignSubModelsAcrossCVModels(cvModelBuilders);
+      double[] alphasAndLambdas = alignSubModelsAcrossCVModels(cvModelBuilders);
+      _xval_deviances = new double[alphasAndLambdas.length/2];
+      _xval_sd = new double[alphasAndLambdas.length/2];
       int lmin_max = 0;
       for (int i = 0; i < cvModelBuilders.length; ++i) {  // find the highest best_submodel_idx we need to go through
         GLM g = (GLM) cvModelBuilders[i];
@@ -287,28 +292,33 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
       int lidx = 0; // index into submodel
       int bestId = 0;   // submodel indedx with best Deviance from xval
       int cnt = 0;
-      int alphaIndex = 0;
+
+      boolean lambdasSorted = _parms._lambda.length > 1;
+      for (int i = 1; i < _parms._lambda.length; i++) {
+        if (_parms._lambda[i] >= _parms._lambda[i - 1]) {
+          lambdasSorted = false;
+          break;
+        }
+      }
+
       for (; lidx < lmin_max; ++lidx) { // search through submodel with same lambda and alpha values
         double testDev = 0;
         double testDevSq = 0;
-        // Lambdas are sorted in decreasing order for same alpha values
-        if (lidx > 0 && lambdas[lidx] >= lambdas[Math.max(lidx-1, 0)]) {
-          alphaIndex++;
-        }
         for (int i = 0; i < cvModelBuilders.length; ++i) {  // run cv for each lambda value
           GLM g = (GLM) cvModelBuilders[i];
           if (g._model._output._submodels[lidx] == null) {
             double alpha = g._state.alpha();
             try {
               g._insideCVCheck = true;
-              g._state.setAlpha(_parms._alpha[alphaIndex]); // recompute the submodel using the proper alpha value
-              g._driver.computeSubmodel(lidx, lambdas[lidx], Double.NaN, Double.NaN);
+              g._state.setAlpha(alphasAndLambdas[lidx]); // recompute the submodel using the proper alpha value
+              g._driver.computeSubmodel(lidx, alphasAndLambdas[lidx + alphasAndLambdas.length/2], Double.NaN, Double.NaN);
             } finally {
               g._insideCVCheck = false;
               g._state.setAlpha(alpha);
             }
           }
-          assert lambdas[lidx] == g._model._output._submodels[lidx].lambda_value;
+          assert alphasAndLambdas[lidx] == g._model._output._submodels[lidx].alpha_value &&
+                  alphasAndLambdas[lidx + alphasAndLambdas.length/2] == g._model._output._submodels[lidx].lambda_value;
 
           testDev += g._model._output._submodels[lidx].devianceValid;
           testDevSq += g._model._output._submodels[lidx].devianceValid * g._model._output._submodels[lidx].devianceValid;
@@ -323,7 +333,10 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
         }
         // early stopping - no reason to move further if we're overfitting
         // cannot be used if we have multiple alphas
-        if ((_parms._alpha == null || _parms._alpha.length <= 1) && testDevAvg > bestTestDev && ++cnt == 3) {
+        if ((_parms._alpha == null || _parms._alpha.length <= 1) &&
+                lambdasSorted &&
+                testDevAvg > bestTestDev &&
+                ++cnt == 3) {
           lmin_max = lidx;
           break;
         }
@@ -339,7 +352,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
       _xval_sd = Arrays.copyOf(_xval_sd, lmin_max + 1);
       for (int i = 0; i < cvModelBuilders.length; ++i) {
         GLM g = (GLM) cvModelBuilders[i];
-        g._model._output.setSubmodelIdx(bestId);
+        g._model._output.setSubmodelIdx(bestId, _parms);
       }
       double bestDev = _xval_deviances[bestId];
       double bestDev1se = bestDev + _xval_sd[bestId];
@@ -2835,7 +2848,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
           if ((_parms._lambda_search || _parms._generate_scoring_history) && (_parms._score_each_iteration || 
                   timeSinceLastScoring() > _scoringInterval || ((_parms._score_iteration_interval > 0) &&
                   ((_state._iter % _parms._score_iteration_interval) == 0)))) {
-            _model._output.setSubmodelIdx(_model._output._best_submodel_idx = submodelCount); // quick and easy way to set submodel parameters
+            _model._output.setSubmodelIdx(_model._output._best_submodel_idx = submodelCount, _parms); // quick and easy way to set submodel parameters
             scoreAndUpdateModel(); // update partial results
           }
           _job.update(_workPerIteration, "iter=" + _state._iter + " lmb=" +
@@ -2861,9 +2874,9 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
       if (_state._iter >= _parms._max_iterations)
         _job.warn("Reached maximum number of iterations " + _parms._max_iterations + "!");
       if (_parms._nfolds > 1 && !Double.isNaN(_lambdaCVEstimate))
-        _model._output.setSubmodelIdx(_model._output._best_submodel_idx = _bestCVSubmodel);  // reset best_submodel_idx to what xval has found
+        _model._output.setSubmodelIdx(_model._output._best_submodel_idx = _bestCVSubmodel, _parms);  // reset best_submodel_idx to what xval has found
       else
-        _model._output.pickBestModel();
+        _model._output.pickBestModel(_parms);
       if (_vcov != null) { // should move this up, otherwise, scoring will never use info in _vcov
         _model.setVcov(_vcov);
         _model.update(_job._key);
