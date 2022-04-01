@@ -60,14 +60,24 @@ public class FrameUtils {
   }
 
   public static Key eagerLoadFromHTTP(String path) throws IOException {
-    java.net.URL url = new URL(path);
-    Key destination_key = Key.make(path);
-    java.io.InputStream is = url.openStream();
-    UploadFileVec.ReadPutStats stats = new UploadFileVec.ReadPutStats();
-    UploadFileVec.readPut(destination_key, is, stats);
-    return destination_key;
+    return eagerLoadFromURL(path, new URL(path));
   }
 
+  public static Key<?> eagerLoadFromURL(String sourceId, URL url) throws IOException {
+    InputStream is = url.openStream();
+    return eagerLoadFromInputStream(sourceId, is);
+  }
+
+  public static Key<?> eagerLoadFromInputStream(String sourceId, InputStream is) throws IOException {
+    try {
+      Key<?> destination_key = Key.make(sourceId);
+      UploadFileVec.ReadPutStats stats = new UploadFileVec.ReadPutStats();
+      UploadFileVec.readPut(destination_key, is, stats);
+      return destination_key;
+    } finally {
+      IOUtils.closeQuietly(is);
+    }
+  }
 
   public static Frame parseFrame(Key okey, ParseSetup parseSetup, URI ...uris) throws IOException {
     if (uris == null || uris.length == 0) {
