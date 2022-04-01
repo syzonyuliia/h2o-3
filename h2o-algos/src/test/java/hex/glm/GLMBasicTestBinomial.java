@@ -20,6 +20,7 @@ import water.*;
 import water.exceptions.H2OIllegalArgumentException;
 import water.exceptions.H2OModelBuilderIllegalArgumentException;
 import water.fvec.*;
+import water.util.ArrayUtils;
 import water.util.VecUtils;
 
 import java.util.*;
@@ -1521,6 +1522,143 @@ public class GLMBasicTestBinomial extends TestUtil {
     } finally {
       Scope.exit();
     }
+  }
+
+  /***
+   * Here I am trying to compare IRLSM generated manually and those implemented in H2O GLM are the same.
+   */
+  @Test
+  public void testBinomialIRLSM() {
+    Scope.enter();
+    try {
+      Frame bigFrame = parseAndTrackTestFile("smalldata/gam_test/synthetic_20Cols_binomial_20KRows.csv");
+      String[] ignoreCols = new String[]{"C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10"};
+      SplitFrame sf = new SplitFrame(bigFrame, new double[]{0.01, 0.99}, null);
+      sf.exec().get();
+      Key[] splits = sf._destination_frames;
+      Frame trainFrame = Scope.track((Frame) splits[0].get());
+      Scope.track((Frame) splits[1].get());
+      double[] startVal = new double[]{0.07453275580005079, 0.064848157889351, 0.06002544346079828, 0.08681890882639597,
+              0.08383870319271398, 0.08867949974556715, 0.007576417746370567, 0.05373550607913393, 0.0005879217569412454,
+              0.08942772492726005, 0.03461378283678047};
+      GLMParameters parms = new GLMParameters();
+      parms._family = binomial;
+      parms._train = trainFrame._key;
+      parms._response_column = "response";
+      parms._startval = startVal;
+      parms._ignored_columns = ignoreCols;
+      parms._max_iterations = 1;
+      parms._compute_p_values = true;
+      parms._standardize = false;
+      parms._lambda = new double[]{0};
+      GLMModel model = new GLM(parms).trainModel().get();
+      Scope.track_generic(model);
+      assertCorrectCoeffs(model, trainFrame, parms._response_column, startVal);
+    } finally {
+      Scope.exit();
+    }
+  }
+  
+  public void assertCorrectCoeffs(GLMModel model, Frame trainFrame, String response, double[] betaOld) {
+    double[] modelCoef = model._output.beta();
+    double[] manualCoef = genBinomialCoeff(trainFrame, response, model._output.coefficientNames(), betaOld);
+    assertArrayEquals(modelCoef, manualCoef, 1e-6);
+  }
+
+  /***
+   * Generate coefficients of GLM binomial family in III.II of doc in https://h2oai.atlassian.net/browse/PUBDEV-8585
+   */
+  public static double[] genBinomialCoeff(Frame train, String responseCol, String[] predictorNames, double[] betaOld) {
+    int predLen = betaOld.length-1;
+    int numRows = (int) train.numRows();
+    double[][] y = new double[numRows][1];
+    double[][] x = new double[numRows][predLen]; // exclude intercept
+    double[] w = new double[numRows];
+    double[] p = new double[numRows];
+    double[] z = new double[numRows]; // contains z and tilde z
+    
+    convertFrame2Array(train, responseCol, predictorNames, y, x);
+    formP_W_Z(x, y, p, w, betaOld, z);
+    double[][] tx = formTX_TZ(x, z, w); // x, z now representing tilde x, tilde z respectively
+    double[] betaNew = formNewCoeff(tx, z);
+    
+    return betaNew;
+  }
+
+  /***
+   * Forming new coefficients using equation 8 of doc in https://h2oai.atlassian.net/browse/PUBDEV-8585
+   */
+  public static double[] formNewCoeff(double[][] tx, double[] z) {
+    double[][] gram = formGram(tx);
+    double[] b = formY(tx, z);
+    Matrix gMat = new Matrix(gram);
+    double[][] gramInv = gMat.inverse().getArray();
+    return ArrayUtils.mmul(gramInv, b);
+  }
+  
+  public static double[] formY(double[][] tx, double[] z) {
+    int numRows = tx.length;
+    int coefLen = tx[0].length;
+    double[][] txTranspose = ArrayUtils.transpose(tx);
+    double[] y = new double[coefLen];
+    for (int index=0; index<coefLen; index++)
+      y[index] = ArrayUtils.innerProduct(txTranspose[index], z);
+    return y;
+  }
+  
+  public static double[][] formGram(double[][] tx) {
+    int coefLen = tx[0].length;
+    double[][] gram = new double[coefLen][coefLen];
+    for (int index=0; index<coefLen; index++) {
+      for (int index1=index; index1<coefLen; index1++) {
+        gram[index][index1] = ArrayUtils.innerProduct(tx[index], tx[index1]);
+        gram[index1][index] = gram[index][index1];
+      }
+    }
+    return gram;
+  }
+  
+  public static void convertFrame2Array(Frame train, String responseCol, String[] predictorNames, double[][] y, 
+                                        double[][] x) {
+    List<String> predNames = Arrays.asList(train.names());
+    new ArrayUtils.FrameToArray(predNames.indexOf(responseCol), predNames.indexOf(responseCol), train.numRows(), y).doAll(train);
+    new ArrayUtils.FrameToArray(predNames.indexOf(predictorNames[0]), 
+            predNames.indexOf(predictorNames[predictorNames.length-2]), train.numRows(), x).doAll(train);
+  }
+  
+  public static void formP_W_Z(double[][] x, double[][] y, double[] p, double[] w, double[] betaOld, double[] z) {
+    assert (x[0].length+1)==betaOld.length && y.length==x.length && y.length==p.length && p.length==w.length && w.length==z.length;
+    int numRows = p.length;
+    for (int rowIndex=0; rowIndex<numRows; rowIndex++) {
+      double prod = innerProd(x[rowIndex], betaOld);
+      p[rowIndex] = 1.0/(1+Math.exp(-prod));
+      w[rowIndex] = p[rowIndex]*(1-p[rowIndex]);
+      z[rowIndex] = prod+(y[rowIndex][0]-p[rowIndex])/w[rowIndex];
+    }
+  } 
+  
+  public static double innerProd(double[] x, double[] beta) {
+    double temp = 0;
+    int numPred = x.length;
+    for (int index=0; index<numPred; index++)
+      temp += x[index]*beta[index];
+    return temp+beta[numPred];
+  }
+  
+  // form tilde X, tilde Z here as described in III.II of https://h2oai.atlassian.net/browse/PUBDEV-8585
+  public static double[][] formTX_TZ(double[][] x, double[] z, double[] w) {
+    int numRows = z.length;
+    int nPred = x[0].length;
+    double[][] tx = new double[numRows][nPred+1]; // need to add extra columns of 1 to the end.
+    for (int rowIndex=0; rowIndex<numRows; rowIndex++) {
+      double temp = Math.sqrt(w[rowIndex]);
+      z[rowIndex] = temp*z[rowIndex];
+      for (int colIndex=0; colIndex<nPred; colIndex++) {
+        tx[rowIndex][colIndex] = temp*x[rowIndex][colIndex];
+      }
+      tx[rowIndex][nPred] = temp;
+    }
+    return tx;
   }
   
   public void assertStandardErr(GLMModel model, double[] manualStdErr, double reg) {
