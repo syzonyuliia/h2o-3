@@ -330,7 +330,7 @@ public class SDT extends ModelBuilder<SDTModel, SDTModel.SDTParameters, SDTModel
     public boolean isSupervised() {
         return true;
     }
-    
+
 
     /**
      * Count classes withing samples satisfying given limits.
